@@ -27,6 +27,9 @@ public class CollaborationServices {
 		if(c.getLifelines().isEmpty()) {
 			c.getLifelines().addAll(state.getLifelines());
 		}
+		if(c.getFragments().isEmpty()) {
+			c.getFragments().addAll(state.getFragments());
+		}
 	}
 	
 	public List<CLifeline> getLifelines(Collaboration o){
@@ -48,6 +51,10 @@ public class CollaborationServices {
 	public List<CExecution> getExecutions(Collaboration o, CLifeline lifeline){
 		ifInit(o);
 		return collaborationMap.get(o).getExecutions(lifeline);
+	}
+	public List<CFragment> getFragments(Collaboration o){
+		ifInit(o);
+		return collaborationMap.get(o).getFragments();
 	}
 	public Boolean hello(Collaboration collaboration){
 		ifInit(collaboration);

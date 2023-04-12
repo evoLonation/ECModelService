@@ -19,6 +19,7 @@ public class CollaborationState {
 	List<CMessage> messageList = new ArrayList<>();
 	List<CMessage> returnMessageList = new ArrayList<>();
 	Map<CLifeline, List<CExecution>> executionMap = new HashMap<>();
+	List<CFragment> fragmentList = new ArrayList<>();
 	public List<CLifeline> getLifelines(){
 		return lifelineList;
 	}
@@ -40,14 +41,32 @@ public class CollaborationState {
 	public List<CExecution> getExecutions(){
 		return executionMap.values().stream().flatMap(e -> e.stream()).collect(Collectors.toList());
 	}
+	public List<CFragment> getFragments(){
+		return fragmentList;
+	}
 	
 	
 	public CollaborationState(Collaboration collaboration) {
 		initLifeline();
 		var execution = startCall("call1", caller, callee);
 		selfCall("call2", execution);
+		startFragment("alt");
+		fillOperand("current = true");
+		startFragment("alt");
+		fillOperand("giao");
 		selfCall("call3", execution);
+		fillLifeline(callee);
+		finishFragment();
+		fillOperand("current = false");
+		var execution2 = startCall("collaborate", execution, collaborater);
+		selfCall("call4", execution2);
+		notice("noticeDoctor", execution2, notify);
 		finishCall(true);
+		fillLifeline(callee);
+		fillLifeline(collaborater);
+		finishFragment();
+		finishCall(true);
+		
 		
 //		TransactionalEditingDomain domain = TransactionUtil.getEditingDomain(collaboration);
 //	    domain.getCommandStack().execute(new RecordingCommand(domain) {
@@ -65,18 +84,19 @@ public class CollaborationState {
 	
 	private CLifeline caller;
 	private CLifeline callee;
+	private CLifeline collaborater;
+	private CLifeline notify;
 	private void initLifeline() {
-		var l1 = addLifeline("patient");
-		var l2 = addLifeline("service");
-		caller = l1;
-		callee = l2;
+		caller = addLifeline("patient");
+		callee = addLifeline("edgeService");
+		collaborater = addLifeline("cloud");
+		notify = addLifeline("doctor");
 	}
 	
 	static class CallInfo{
 		CPoint source;
 		CPoint target;
 		CEnd finishEnd;
-		
 	}
 	private Stack<CallInfo> callStack = new Stack<>();
 	private CExecution startCall(String name, CPoint source, CLifeline target) {
@@ -104,7 +124,43 @@ public class CollaborationState {
 	private void selfCall(String name, CExecution execution) {
 		addMessage(addEnd(), addEnd(), execution, execution, name, false);
 	}
-
+	private void notice(String name, CExecution start, CLifeline lifeline) {
+		addMessage(addEnd(), addEnd(), start, lifeline, name, false);
+	}
+	
+	static class FragmentInfo{
+		private CEnd startEnd;
+		private CEnd finishEnd;
+		private String operator;
+		private List<CLifeline> lifelines = new ArrayList<>();
+		private List<COperand> operands = new ArrayList<>();
+		
+	}
+	private Stack<FragmentInfo> fragmentStack = new Stack<>();
+	private void startFragment(String operator) {
+		var e1 = createEnd();
+		var info = new FragmentInfo();
+		info.startEnd = e1;
+		info.finishEnd = e1;
+		info.operator = operator;
+		fragmentStack.push(info);
+	}
+	private void fillOperand(String condition) {
+		var info = fragmentStack.peek();
+		addEnd(info.finishEnd);
+		var newFinishEnd = createEnd();
+		var o = createOperand(info.finishEnd, newFinishEnd, condition);
+		info.finishEnd = newFinishEnd;
+		info.operands.add(o);
+	}
+	private void fillLifeline(CLifeline lifeline) {
+		fragmentStack.peek().lifelines.add(lifeline);
+	}
+	private void finishFragment() {
+		var info = fragmentStack.pop();
+		addEnd(info.finishEnd);
+		addFragment(info.startEnd, info.finishEnd, info.operator, info.operands, info.lifelines);
+	}
 
 	
 	
@@ -132,9 +188,12 @@ public class CollaborationState {
 		endNum++;
 		return tempEnd;
 	}
+	private int  msgNum = 0;
 	private void addMessage(CEnd sender, CEnd receiver, CPoint source, CPoint target, String name, boolean isReturn) {
 		CMessage tempMessage = ecModelFactory.createCMessage();
-		tempMessage.setName(name);
+		tempMessage.setName("a" + msgNum);
+		msgNum++;
+		tempMessage.setOperation(name);
 		tempMessage.setSender(sender);
 		tempMessage.setReceiver(receiver);
 		tempMessage.setSourcePoint(source);
@@ -156,6 +215,31 @@ public class CollaborationState {
 		executionMap.get(lifeline).add(tempExecution);
 		return tempExecution;
 	}
+	private int fragmentNum = 0;
+	private CFragment addFragment(CEnd start, CEnd finish, String operator, List<COperand> operands, List<CLifeline> lifelines) {
+		CFragment f = ecModelFactory.createCFragment();
+		f.setName("a" + fragmentNum);
+		fragmentNum++;
+		f.setStart(start);
+		f.setFinish(finish);
+		f.setOperator(operator);
+		f.getCoveredLifelines().addAll(lifelines);
+		f.getOperands().addAll(operands);
+		fragmentList.add(f);
+		return f;
+	}
+	private int operandNum = 0;
+	private COperand createOperand(CEnd start, CEnd finish, String condition) {
+		var o = ecModelFactory.createCOperand();
+		o.setName("a" + operandNum);
+		operandNum++;
+		o.setCondition(condition);
+		o.setStart(start);
+		o.setFinish(finish);
+		o.setCondition(condition);
+		return o;
+	}
+	
 	
 
 
