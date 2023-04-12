@@ -51,13 +51,13 @@ public class CollaborationState {
 		var execution = startCall("call1", caller, callee);
 		selfCall("call2", execution);
 		startFragment("alt");
-		fillOperand("current = true");
+		fillOperand("current_equals_to_true");
 		startFragment("alt");
 		fillOperand("giao");
 		selfCall("call3", execution);
 		fillLifeline(callee);
 		finishFragment();
-		fillOperand("current = false");
+		fillOperand("current_equals_to_false");
 		var execution2 = startCall("collaborate", execution, collaborater);
 		selfCall("call4", execution2);
 		notice("noticeDoctor", execution2, notify);
@@ -87,10 +87,10 @@ public class CollaborationState {
 	private CLifeline collaborater;
 	private CLifeline notify;
 	private void initLifeline() {
-		caller = addLifeline("patient");
-		callee = addLifeline("edgeService");
-		collaborater = addLifeline("cloud");
-		notify = addLifeline("doctor");
+		caller = addLifeline("patient", true);
+		callee = addLifeline("edgeService", false);
+		collaborater = addLifeline("cloud", false);
+		notify = addLifeline("doctor", true);
 	}
 	
 	static class CallInfo{
@@ -167,9 +167,10 @@ public class CollaborationState {
 	
 	
 	ECModelFactory ecModelFactory = ECModelFactory.eINSTANCE;
-	private CLifeline addLifeline(String name) {
+	private CLifeline addLifeline(String name, boolean isActor) {
 		CLifeline lifeline = ecModelFactory.createCLifeline();
 		lifeline.setName(name);
+		lifeline.setIsActor(isActor);
 		lifelineList.add(lifeline);
 		return lifeline;
 	}
