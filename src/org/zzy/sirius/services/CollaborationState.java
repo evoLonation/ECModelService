@@ -45,29 +45,28 @@ public class CollaborationState {
 		return fragmentList;
 	}
 	
+	private Collaboration collaboration;
 	
 	public CollaborationState(Collaboration collaboration) {
-		initLifeline();
-		var execution = startCall("call1", caller, callee);
-		selfCall("call2", execution);
-		startFragment("alt");
-		fillOperand("current_equals_to_true");
-		startFragment("alt");
-		fillOperand("giao");
-		selfCall("call3", execution);
-		fillLifeline(callee);
-		finishFragment();
-		fillOperand("current_equals_to_false");
-		var execution2 = startCall("collaborate", execution, collaborater);
-		selfCall("call4", execution2);
-		notice("noticeDoctor", execution2, notify);
-		finishCall(true);
-		fillLifeline(callee);
-		fillLifeline(collaborater);
-		finishFragment();
-		finishCall(true);
 		
-		
+//		var execution = startCall("call1", caller, callee);
+//		selfCall("call2", execution);
+//		startFragment("alt");
+//		fillOperand("current_equals_to_true");
+//		startFragment("alt");
+//		fillOperand("giao");
+//		selfCall("call3", execution);
+//		fillLifeline(callee);
+//		finishFragment();
+//		fillOperand("current_equals_to_false");
+//		var execution2 = startCall("collaborate", execution, collaborator);
+//		selfCall("call4", execution2);
+//		notice("noticeDoctor", execution2, notify);
+//		finishCall(true);
+//		fillLifeline(callee);
+//		fillLifeline(collaborator);
+//		finishFragment();
+//		finishCall(true);
 //		TransactionalEditingDomain domain = TransactionUtil.getEditingDomain(collaboration);
 //	    domain.getCommandStack().execute(new RecordingCommand(domain) {
 //	        @Override
@@ -79,27 +78,93 @@ public class CollaborationState {
 //	    		collaboration.getLifelines().addAll(lifelineList);
 //	        }
 //	    });
-		
+		this.collaboration = collaboration;
+		generateLifeline();
+		generateBlock(collaboration.getCallBlock(), false);
 	}
 	
+	private Map<Actor, CLifeline> notifyMap = new HashMap<>();
 	private CLifeline caller;
 	private CLifeline callee;
-	private CLifeline collaborater;
-	private CLifeline notify;
-	private void initLifeline() {
-		caller = addLifeline("patient", true);
-		callee = addLifeline("edgeService", false);
-		collaborater = addLifeline("cloud", false);
-		notify = addLifeline("doctor", true);
+	private CLifeline collaborator;
+	private void generateLifeline() {
+		caller = addLifeline(collaboration.getCaller().getName(), true);
+		callee = addLifeline(collaboration.getCallee().getName(), false);
+		collaborator = addLifeline(collaboration.getCollaborator().getName(), false);
+		notifyMap = collaboration.getNotifies().stream()
+				.collect(Collectors.toMap(a -> a, a -> addLifeline(a.getName(), true)));
 	}
+	
+	private void generateBlock(Block block, boolean isCollaborate) {
+		CLifeline source;
+		CLifeline target;
+		if(isCollaborate) {
+			source = callee;
+			target = collaborator;
+		}else {
+			source = caller;
+			target = callee;
+		}
+		var execution = startCall(block.getName().getName(), source, target, block.getReturnParam() != null);
+		executionStack.push(execution);
+		block.getStatements().forEach(s -> dealStatement(s, isCollaborate));
+		finishCall();
+		executionStack.pop();
+	}
+	private Stack<CExecution> executionStack = new Stack<>();
+	//返回值表示是否参与了调用
+	private boolean dealStatement(Statement statement, boolean isCollaborator) {
+		if(statement instanceof OperationStatement) {
+			selfCall(((OperationStatement)statement).getOperation().getName(), executionStack.peek());
+		}else if(statement instanceof NoticeStatement) {
+			notice(((NoticeStatement)statement).getEvent().getName(), 
+					executionStack.peek(), 
+					notifyMap.get(((NoticeStatement)statement).getActor()));
+		}else if(statement instanceof CallStatement) {
+			Block block;
+			if(collaboration.getCallBlock().getName() == ((CallStatement)statement).getService()) {
+				block = collaboration.getCallBlock();
+			}else {
+				block = collaboration.getCollaborateBlock();
+			}
+			generateBlock(block, true);
+			return true;
+		}else if(statement instanceof IfStatement) {
+			var ss = (IfStatement) statement;
+			startFragment("alt");
+			insertOperand(ss.getCondition());
+			var isCallList = ss.getIfStatements().stream().map(s -> dealStatement(s, isCollaborator)).collect(Collectors.toList());
+			isCallList.stream().filter(s -> s).findAny()
+				.ifPresent(a -> fillLifeline(collaborator));
+			if(ss.getElseStatements() != null) {
+				// todo
+			}
+			fillLifeline(callee);
+			finishFragment();
+		}else if(statement instanceof WhileStatement) {
+			var ss = (WhileStatement) statement;
+			startFragment("loop");
+			insertOperand(ss.getCondition());
+			var isCallList = ss.getStatements().stream().map(s -> dealStatement(s, isCollaborator)).collect(Collectors.toList());
+			isCallList.stream().filter(s -> s).findAny()
+				.ifPresent(a -> fillLifeline(collaborator));
+			fillLifeline(callee);
+			finishFragment();
+		}
+		return false;
+	}
+	
+	
+	
 	
 	static class CallInfo{
 		CPoint source;
 		CPoint target;
 		CEnd finishEnd;
+		boolean isReturn;
 	}
 	private Stack<CallInfo> callStack = new Stack<>();
-	private CExecution startCall(String name, CPoint source, CLifeline target) {
+	private CExecution startCall(String name, CPoint source, CLifeline target, boolean isReturn) {
 		var info = new CallInfo();
 		var end1 = addEnd();
 		var end2 = addEnd();
@@ -109,14 +174,15 @@ public class CollaborationState {
 		info.source = source;
 		info.target = execution;
 		info.finishEnd = end3;
+		info.isReturn = isReturn;
 		callStack.push(info);
 		return execution;
 	}
-	private void finishCall(boolean isReturn) {
+	private void finishCall() {
 		var info = callStack.pop();
 		var e1 = info.finishEnd;
 		addEnd(e1);
-		if(isReturn) {	
+		if(info.isReturn) {	
 			var e2 = addEnd();
 			addMessage(e1, e2, info.target, info.source, "return", true);
 		}
@@ -145,7 +211,7 @@ public class CollaborationState {
 		info.operator = operator;
 		fragmentStack.push(info);
 	}
-	private void fillOperand(String condition) {
+	private void insertOperand(AtomicExpression condition) {
 		var info = fragmentStack.peek();
 		addEnd(info.finishEnd);
 		var newFinishEnd = createEnd();
@@ -230,7 +296,7 @@ public class CollaborationState {
 		return f;
 	}
 	private int operandNum = 0;
-	private COperand createOperand(CEnd start, CEnd finish, String condition) {
+	private COperand createOperand(CEnd start, CEnd finish, AtomicExpression condition) {
 		var o = ecModelFactory.createCOperand();
 		o.setName("a" + operandNum);
 		operandNum++;

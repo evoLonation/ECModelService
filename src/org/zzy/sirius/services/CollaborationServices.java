@@ -9,6 +9,9 @@ import org.eclipse.emf.ecore.resource.ResourceSet;
 import org.eclipse.emf.ecore.resource.impl.ResourceSetImpl;
 import org.xtext.example.edgecloudmodel.eCModel.*;
 public class CollaborationServices {
+	public String printAtomicExp(AtomicExpression exp) {
+		return "atomicExp";
+	}
 	
 	static Map<Collaboration, CollaborationState> collaborationMap = new HashMap<>();
 	
